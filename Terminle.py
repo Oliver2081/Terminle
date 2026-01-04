@@ -1,14 +1,10 @@
-# Terminle.py V1.0
+# Terminle.py V1.1
 # A script to play wordle in the terminal
 # Interfaces with nytimes.com to fetch today's word
 # Colour support with guess history and letter information
 # Allowed words are loaded from a file (words.xz)
 
-# TODO
-# Add game statistics, potentially charts
-# Add custom games
-
-import lzma, os
+import lzma, os, json
 import requests
 from datetime import datetime
 
@@ -18,9 +14,32 @@ HUMAN_DATE = datetime.today().strftime('%d/%m/%Y')
 API_URL = f"https://www.nytimes.com/svc/wordle/v2/{TODAY}.json"
 
 WORDS_FILE = "words.xz"
+SAVE_FILE = "save.json"
+
+BLANK_SAVE = {
+    "completed": "1970-01-01",
+    "played": 0,
+    "won": 0,
+    "lost": 0,
+    "winTurn": {
+        "1": 0,
+        "2": 0,
+        "3": 0,
+        "4": 0,
+        "5": 0,
+        "6": 0
+    }
+}
+
+# Colours
+DEFAULT = "\033[0m"
+GREY = "\033[100m\033[37m"
+YELLOW = "\033[43m\033[30m"
+GREEN = "\033[102m\033[30m"
 
 solution = ""
 puzzleId = 0
+stats = None
 
 validWords = set()
 
@@ -112,11 +131,11 @@ def printLetters(letterStatus):
     outString = ""
     for i, letter in enumerate(letterStatus.keys()):
         if letterStatus[letter] == 0:
-            outString += f"\033[100m\033[37m{letter}\033[0m "
+            outString += f"{GREY}{letter}{DEFAULT} "
         elif letterStatus[letter] == 1:
-            outString += f"\033[43m\033[30m{letter}\033[0m "
+            outString += f"{YELLOW}{letter}{DEFAULT} "
         elif letterStatus[letter] == 2:
-            outString += f"\033[102m\033[30m{letter}\033[0m "
+            outString += f"{GREEN}{letter}{DEFAULT} "
         else:
             outString += f"{letter} "
     
@@ -131,17 +150,45 @@ def printGuessHistory(guessHistory):
 
         for letter in range(5):
             if colours[letter] == 0:
-                outString += f"\033[100m\033[37m{word[letter]}\033[0m"
+                outString += f"{GREY}{word[letter]}{DEFAULT}"
             elif colours[letter] == 1:
-                outString += f"\033[43m\033[30m{word[letter]}\033[0m"
+                outString += f"{YELLOW}{word[letter]}{DEFAULT}"
             elif colours[letter] == 2:
-                outString += f"\033[102m\033[30m{word[letter]}\033[0m"
+                outString += f"{GREEN}{word[letter]}{DEFAULT}"
             else:
                 outString += f"{word[letter]}"
 
         outString += "\n"
 
     print(outString + "\n")
+
+
+def getStats():
+    # Create file if it does not exist
+    if not os.path.exists(SAVE_FILE):
+        with open(SAVE_FILE, "w") as f:
+            json.dump(BLANK_SAVE, f, indent=4)
+
+    # Else read it from the file
+    else:
+        with open(SAVE_FILE, "r") as f:
+            return json.load(f)
+
+def saveStats(stats):
+        with open(SAVE_FILE, "w") as f:
+            json.dump(stats, f, indent=4)
+    
+
+def printStats(stats):
+    print("\nStats:")
+    print(f"    Total Games Played:    {stats["played"]}")
+    print(f"    Win %:                 {round((stats["won"] / stats["played"]) * 100)}%")
+    print(f"    Games Won:             {stats["won"]}")
+    print(f"    Games Lost:            {stats["lost"]}")
+    print(f"\n    Guess Distribution:")
+    for turn in range(6):
+        print(f"        {turn + 1}: {stats["winTurn"][str(turn + 1)]}")
+
 
 def clearScreen():
     if os.name == "nt":
@@ -152,10 +199,11 @@ def clearScreen():
 # Main App
 solution, puzzleId = fetchData()
 validWords = loadValidWords()
+stats = getStats()
 
 # Title Screen
 clearScreen()
-input(startMenu.format(HUMAN_DATE, ))
+input(startMenu)
 
 clearScreen()
 print("\nTerminle\n")
@@ -192,9 +240,33 @@ for turn in range(6):
     if wordStatus == [2, 2, 2, 2, 2]:
         print("Congratulations!")
         print(f"You have beaten today's terminle in {turn + 1} guesses")
+
+        # Update stats
+        if stats["completed"] != TODAY:
+
+            stats["completed"] = TODAY
+            stats["played"] += 1
+            stats["won"] += 1
+            stats["winTurn"][str(turn + 1)] += 1
         
+        saveStats(stats)
+        printStats(stats)
+
         input()
         exit(0)
 
+
 print(f"Today's answer was: {solution}")
 print("Better luck next time")
+
+# Update Stats
+if stats["completed"] != TODAY:
+    
+    stats["completed"] = TODAY
+    stats["played"] += 1
+    stats["lost"] += 1
+
+saveStats(stats)
+printStats(stats)
+
+input()
